@@ -176,21 +176,6 @@ git commit -m "WIP"
 
 ---
 
-## 🌱 Good First Issues
-
-New to the codebase? Start here:
-
-- [ ] Add a loading spinner to the Generate button in the sidebar
-- [ ] Add `.env.example` validation — warn if keys are missing on startup
-- [ ] Show character count on the generated email preview
-- [ ] Add a "Copy to Clipboard" button as fallback to Gmail send
-- [ ] Improve error messages when Gmail API auth fails
-- [ ] Write setup instructions for Windows users
-
-Look for issues tagged [`good first issue`](https://github.com/KIET7UKE/ApplyX/issues?q=label%3A%22good+first+issue%22) on GitHub.
-
----
-
 ## 🙋 Need Help?
 
 - **Stuck on setup?** Open a [GitHub Discussion](https://github.com/KIET7UKE/ApplyX/discussions)
