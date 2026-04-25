@@ -1,438 +1,437 @@
 import * as React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import axios from 'axios';
-import { Mail, Loader2, Send, Copy, Check, X, Settings, LogIn, Upload, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Mail, Loader2, Send, Copy, Check, X, Settings, LogIn, Upload, Eye, EyeOff } from 'lucide-react';
 import { Storage } from '@plasmohq/storage';
-import { allSidebarStyles as styles } from '../components/styles';
-import { Card, Label, Input, TextArea, PrimaryButton } from '../components/UIComponents';
 
 export const config: any = { matches: ['https://www.linkedin.com/*'] };
+export const getShadowHostId = () => 'applyx-host';
 
 const storage = new Storage();
+type Step = 'url' | 'auth' | 'resume' | 'gmail' | 'done';
 
-// ─── Setup step the user is on ───────────────────────────────────────────────
-type SetupStep = 'url' | 'auth' | 'resume' | 'gmail' | 'done';
+const CSS = `
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes slideIn { from { transform: translateX(100%) } to { transform: translateX(0) } }
+@keyframes spin { to { transform: rotate(360deg) } }
+
+.toggle {
+  position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+  z-index: 999999; background: #2563eb; color: #fff; border: none;
+  padding: 16px 12px; border-radius: 14px 0 0 14px; cursor: pointer;
+  box-shadow: -4px 0 24px rgba(37,99,235,0.4);
+  display: flex; align-items: center; justify-content: center;
+  transition: background .2s, padding .2s;
+}
+.toggle:hover { background: #1d4ed8; padding-right: 18px; }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 999999;
+  background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+  display: flex; justify-content: flex-end;
+  animation: fadeIn .2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px; color: #0f172a;
+}
+
+.panel {
+  width: 460px; max-width: 96vw; height: 100vh;
+  background: #f8fafc; display: flex; flex-direction: column;
+  box-shadow: -8px 0 40px rgba(0,0,0,0.15);
+  animation: slideIn .35s cubic-bezier(.16,1,.3,1);
+}
+
+.hdr {
+  background: linear-gradient(135deg,#1e40af,#2563eb);
+  padding: 22px 20px; display: flex; justify-content: space-between;
+  align-items: center; flex-shrink: 0;
+}
+.hdr-title { color: #fff; font-size: 1.3rem; font-weight: 900; letter-spacing: -.02em; }
+.hdr-sub { color: rgba(255,255,255,.8); font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; margin-top: 2px; }
+.close {
+  background: rgba(255,255,255,.15); border: none; color: #fff;
+  width: 36px; height: 36px; border-radius: 10px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .2s, transform .2s; flex-shrink: 0;
+}
+.close:hover { background: rgba(255,255,255,.3); transform: rotate(90deg); }
+
+.body {
+  flex: 1; overflow-y: auto; padding: 18px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+
+.card {
+  background: #fff; padding: 20px; border-radius: 16px;
+  border: 1px solid #e2e8f0; box-shadow: 0 1px 4px rgba(0,0,0,.04);
+}
+
+.lbl {
+  display: block; font-size: .7rem; font-weight: 800; color: #64748b;
+  text-transform: uppercase; letter-spacing: .1em; margin-bottom: 7px;
+}
+
+.inp {
+  width: 100%; padding: 11px 14px; border-radius: 10px;
+  border: 2px solid #e2e8f0; background: #fff; font-size: .9rem;
+  color: #0f172a; outline: none; font-family: inherit;
+  transition: border-color .2s; display: block;
+}
+.inp:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+.inp.ta { resize: none; min-height: 180px; }
+
+.btn {
+  width: 100%; padding: 13px; border: none; border-radius: 12px;
+  font-weight: 800; font-size: .9rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; font-family: inherit; transition: all .2s;
+  letter-spacing: .02em;
+}
+.btn:disabled { opacity: .6; cursor: not-allowed; transform: none !important; }
+.btn-blue { background: #2563eb; color: #fff; box-shadow: 0 4px 14px -4px rgba(37,99,235,.4); }
+.btn-blue:hover:not(:disabled) { background: #1d4ed8; transform: translateY(-1px); }
+.btn-gray { background: #f1f5f9; color: #475569; }
+.btn-gray:hover:not(:disabled) { background: #e2e8f0; }
+
+.ftr {
+  padding: 12px 18px; border-top: 1px solid #e2e8f0;
+  background: #fff; display: flex; align-items: center;
+  gap: 10px; flex-shrink: 0;
+}
+.ftr-txt { flex: 1; font-size: .7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; }
+.cfg { font-size: .7rem; font-weight: 700; color: #2563eb; background: none; border: none; cursor: pointer; padding: 4px 8px; border-radius: 6px; display: flex; align-items: center; gap: 4px; font-family: inherit; }
+.cfg:hover { background: #eff6ff; }
+
+.hint { font-size: .72rem; color: #64748b; line-height: 1.5; margin-top: 6px; }
+.info { padding: 10px 12px; background: #eff6ff; border-radius: 8px; font-size: .72rem; color: #1e40af; line-height: 1.6; margin-top: 10px; }
+.err { color: #b91c1c; font-size: .78rem; margin-top: 8px; }
+.row { display: flex; gap: 10px; }
+.gap8 { height: 8px; }
+.gap14 { height: 14px; }
+.spin { animation: spin 1s linear infinite; }
+.icon-ring { width: 48px; height: 48px; background: #eff6ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; }
+.center { text-align: center; }
+.rel { position: relative; }
+.eye { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94a3b8; display: flex; }
+`;
+
+// ── Tiny components ────────────────────────────────────────────────────────
+const Lbl = ({c}: {c: string}) => <label className="lbl">{c}</label>;
+const Inp = ({ta, ...p}: any) => ta ? <textarea className="inp ta" {...p}/> : <input className="inp" {...p}/>;
+const BtnBlue = ({children, ...p}: any) => <button className="btn btn-blue" {...p}>{children}</button>;
+const BtnGray = ({children, ...p}: any) => <button className="btn btn-gray" {...p}>{children}</button>;
+const Card = ({children, style}: any) => <div className="card" style={style}>{children}</div>;
 
 const LinkedInSidebar = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [setupStep, setSetupStep] = useState<SetupStep>('done');
-
-  // Config state
-  const [backendUrl, setBackendUrl] = useState('');
-  const [token, setToken] = useState('');
-  const [userName, setUserName] = useState('');
-  const [gmailConnected, setGmailConnected] = useState(false);
-  const [resumeExists, setResumeExists] = useState(false);
-
-  // Gmail setup
-  const [gmailEmail, setGmailEmail] = useState('');
-  const [gmailAppPassword, setGmailAppPassword] = useState('');
-  const [showAppPass, setShowAppPass] = useState(false);
-  const [gmailSaving, setGmailSaving] = useState(false);
-  const [gmailError, setGmailError] = useState('');
-
-  // Resume upload
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [resumeUploading, setResumeUploading] = useState(false);
-
-  // Generation state
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<Step>('done');
+  const [url, setUrl] = useState('');
+  const [urlIn, setUrlIn] = useState('');
+  const [tok, setTok] = useState('');
+  const [name, setName] = useState('');
+  const [gmailOk, setGmailOk] = useState(false);
+  const [polling, setPolling] = useState(false);
+  const [pollMsg, setPollMsg] = useState('');
+  const pollRef = useRef(false);
+  const [gEmail, setGEmail] = useState('');
+  const [gPass, setGPass] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [gSaving, setGSaving] = useState(false);
+  const [gErr, setGErr] = useState('');
+  const [resume, setResume] = useState<File|null>(null);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [emailText, setEmailText] = useState('');
-  const [emailSubject, setEmailSubject] = useState('');
-  const [error, setError] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [emailSubj, setEmailSubj] = useState('');
+  const [genErr, setGenErr] = useState('');
   const [copied, setCopied] = useState(false);
   const [sending, setSending] = useState(false);
-  const [showReview, setShowReview] = useState(false);
-  const [authorInput, setAuthorInput] = useState('');
-  const [postInput, setPostInput] = useState('');
-  const [emailInput, setEmailInput] = useState('');
+  const [review, setReview] = useState(false);
+  const [toEmail, setToEmail] = useState('');
+  const [author, setAuthor] = useState('');
+  const [postTxt, setPostTxt] = useState('');
 
-  // ── Bootstrap ──────────────────────────────────────────────────────────────
+  const checkProfile = useCallback(async (u: string, t: string): Promise<Step|null> => {
+    try {
+      const [p, r] = await Promise.all([
+        axios.get(`${u}/api/user/profile`, {headers:{Authorization:`Bearer ${t}`}, timeout:8000}),
+        axios.get(`${u}/api/resume/status`, {headers:{Authorization:`Bearer ${t}`}, timeout:8000}),
+      ]);
+      setName(p.data.name || '');
+      setGmailOk(!!p.data.gmailEmail);
+      if (p.data.gmailEmail) setGEmail(p.data.gmailEmail);
+      if (!r.data.exists) return 'resume';
+      if (!p.data.gmailEmail) return 'gmail';
+      return 'done';
+    } catch { return null; }
+  }, []);
+
   useEffect(() => {
     (async () => {
-      const url = (await storage.get('backendUrl') as string) || '';
-      const tok = (await storage.get('supabaseToken') as string) || '';
-      setBackendUrl(url);
-      setToken(tok);
-
-      if (!url) { setSetupStep('url'); return; }
-      if (!tok) { setSetupStep('auth'); return; }
-
-      // Validate token + fetch profile
-      try {
-        const { data } = await axios.get(`${url}/api/user/profile`, {
-          headers: { Authorization: `Bearer ${tok}` },
-        });
-        setUserName(data.name || '');
-        setGmailConnected(!!data.gmailEmail);
-        if (data.gmailEmail) setGmailEmail(data.gmailEmail);
-
-        // Check resume
-        const { data: rData } = await axios.get(`${url}/api/resume/status`, {
-          headers: { Authorization: `Bearer ${tok}` },
-        });
-        setResumeExists(rData.exists);
-
-        if (!rData.exists) { setSetupStep('resume'); return; }
-        if (!data.gmailEmail) { setSetupStep('gmail'); return; }
-        setSetupStep('done');
-      } catch {
-        // Token expired or invalid — re-auth
-        await storage.remove('supabaseToken');
-        setToken('');
-        setSetupStep('auth');
-      }
+      const u = (await storage.get('backendUrl') as string) || '';
+      const t = (await storage.get('supabaseToken') as string) || '';
+      setUrl(u); setUrlIn(u); setTok(t);
+      if (!u) { setStep('url'); return; }
+      if (!t) { setStep('auth'); return; }
+      const s = await checkProfile(u, t);
+      if (!s) { await storage.remove('supabaseToken'); setTok(''); setStep('auth'); }
+      else setStep(s);
     })();
 
-    // Watch for inline button trigger
-    storage.watch({
-      triggerSidebar: (c) => {
-        if (c.newValue) {
-          const { author, postText, email } = c.newValue;
-          setAuthorInput(author || '');
-          setPostInput(postText || '');
-          setEmailInput(email || '');
-          setIsOpen(true);
-          setShowReview(true);
-          setError('');
-          storage.set('triggerSidebar', null);
-        }
-      },
-    });
-  }, []);
+    storage.watch({ triggerSidebar: (c) => {
+      if (c.newValue) {
+        setAuthor(c.newValue.author || '');
+        setPostTxt(c.newValue.postText || '');
+        setToEmail(c.newValue.email || '');
+        setOpen(true); setReview(true); setGenErr('');
+        storage.set('triggerSidebar', null);
+      }
+    }});
+  }, [checkProfile]);
 
-  // ── Auth: open backend login page ─────────────────────────────────────────
-  const handleOpenLogin = () => {
-    if (!backendUrl) return;
-    chrome.tabs.create({ url: backendUrl });
-  };
-
-  // Listen for token posted from the web app after login
   useEffect(() => {
-    const handler = async (msg: any) => {
-      if (msg.type === 'APPLYX_TOKEN' && msg.token) {
-        await storage.set('supabaseToken', msg.token);
-        setToken(msg.token);
-        // Re-run bootstrap by reloading
-        window.location.reload();
+    const h = async (e: MessageEvent) => {
+      if (e.data?.type === 'APPLYX_TOKEN' && e.data?.token) {
+        const t = e.data.token;
+        await storage.set('supabaseToken', t);
+        setTok(t); pollRef.current = false; setPolling(false);
+        const u = (await storage.get('backendUrl') as string) || url;
+        if (u) { const s = await checkProfile(u, t); if (s) setStep(s); }
       }
     };
-    chrome.runtime.onMessage.addListener(handler);
-    return () => chrome.runtime.onMessage.removeListener(handler);
-  }, []);
+    window.addEventListener('message', h);
+    return () => window.removeEventListener('message', h);
+  }, [checkProfile, url]);
 
-  // ── Resume upload ──────────────────────────────────────────────────────────
-  const handleResumeUpload = async () => {
-    if (!resumeFile) return;
-    setResumeUploading(true);
+  const startPoll = useCallback((u: string) => {
+    pollRef.current = true; setPolling(true); setPollMsg('Waiting for login...');
+    let n = 0;
+    const iv = setInterval(async () => {
+      if (!pollRef.current) { clearInterval(iv); return; }
+      if (++n > 60) { clearInterval(iv); pollRef.current = false; setPolling(false); return; }
+      const t = await storage.get('supabaseToken') as string;
+      if (t) {
+        clearInterval(iv); pollRef.current = false; setPolling(false);
+        setTok(t);
+        const s = await checkProfile(u, t);
+        if (s) setStep(s);
+      } else setPollMsg(`Waiting for login... (${n})`);
+    }, 2000);
+  }, [checkProfile]);
+
+  const openLogin = async () => {
+    if (!url) { alert('Save your backend URL first'); return; }
+    try { chrome.tabs.create({ url: `${url}/auth-callback` }); }
+    catch { window.open(`${url}/auth-callback`, '_blank'); }
+    startPoll(url);
+  };
+
+  const saveUrl = async () => {
+    const c = urlIn.replace(/\/$/, '').trim();
+    if (!c.startsWith('http')) { alert('Enter a valid https:// URL'); return; }
+    await storage.set('backendUrl', c); setUrl(c); setStep('auth');
+  };
+
+  const uploadResume = async () => {
+    if (!resume) return;
+    setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', resumeFile);
-      await axios.post(`${backendUrl}/api/resume/upload`, formData, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setResumeExists(true);
-      setResumeFile(null);
-      setSetupStep(gmailConnected ? 'done' : 'gmail');
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Upload failed');
-    } finally {
-      setResumeUploading(false);
-    }
+      const fd = new FormData(); fd.append('file', resume);
+      await axios.post(`${url}/api/resume/upload`, fd, {headers:{Authorization:`Bearer ${tok}`}, timeout:30000});
+      setResume(null); setStep(gmailOk ? 'done' : 'gmail');
+    } catch (e: any) { alert(e.response?.data?.error || 'Upload failed'); }
+    finally { setUploading(false); }
   };
 
-  // ── Gmail save ─────────────────────────────────────────────────────────────
-  const handleSaveGmail = async () => {
-    if (!gmailEmail || !gmailAppPassword) {
-      setGmailError('Both fields are required.');
-      return;
-    }
-    setGmailSaving(true);
-    setGmailError('');
+  const saveGmail = async () => {
+    if (!gEmail || !gPass) { setGErr('Both fields required.'); return; }
+    setGSaving(true); setGErr('');
     try {
-      await axios.post(
-        `${backendUrl}/api/user/gmail`,
-        { gmailEmail, gmailAppPassword },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setGmailConnected(true);
-      setSetupStep('done');
-    } catch (err: any) {
-      setGmailError(err.response?.data?.error || 'Failed to connect Gmail');
-    } finally {
-      setGmailSaving(false);
-    }
+      await axios.post(`${url}/api/user/gmail`, {gmailEmail:gEmail, gmailAppPassword:gPass}, {headers:{Authorization:`Bearer ${tok}`}, timeout:15000});
+      setGmailOk(true); setStep('done');
+    } catch (e: any) { setGErr(e.response?.data?.error || 'Failed'); }
+    finally { setGSaving(false); }
   };
 
-  // ── Email generation ───────────────────────────────────────────────────────
-  const startAIGeneration = async () => {
-    if (!postInput || !authorInput) { setError('Please provide all fields.'); return; }
-    setLoading(true);
-    setError('');
-    setShowReview(false);
+  const generate = async () => {
+    if (!postTxt || !author) { setGenErr('Fill all fields.'); return; }
+    setLoading(true); setGenErr(''); setReview(false);
     try {
-      const { data } = await axios.post(
-        `${backendUrl}/api/generate-email`,
-        { postText: postInput, authorName: authorInput },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setEmailSubject(data.subject || 'Re: Job Inquiry');
-      setEmailText(data.body || '');
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Generation failed.');
-    } finally {
-      setLoading(false);
-    }
+      const {data} = await axios.post(`${url}/api/generate-email`, {postText:postTxt, authorName:author}, {headers:{Authorization:`Bearer ${tok}`}, timeout:30000});
+      setEmailSubj(data.subject || ''); setEmailBody(data.body || '');
+    } catch (e: any) { setGenErr(e.response?.data?.error || 'Generation failed'); }
+    finally { setLoading(false); }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(`${emailSubject}\n\n${emailText}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copy = () => {
+    navigator.clipboard.writeText(`${emailSubj}\n\n${emailBody}`);
+    setCopied(true); setTimeout(()=>setCopied(false), 2000);
   };
 
-  const handleSend = async () => {
-    if (!emailInput) { alert('Please enter a recipient email.'); return; }
+  const sendEmail = async () => {
+    if (!toEmail) { alert('Enter recipient email'); return; }
     setSending(true);
     try {
-      await axios.post(
-        `${backendUrl}/api/send-email`,
-        { to: emailInput, subject: emailSubject, body: emailText },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      alert('Email sent via ApplyX!');
-      setIsOpen(false);
-    } catch (err: any) {
-      alert('Failed to send: ' + (err.response?.data?.error || err.message));
-    } finally {
-      setSending(false);
-    }
+      await axios.post(`${url}/api/send-email`, {to:toEmail, subject:emailSubj, body:emailBody}, {headers:{Authorization:`Bearer ${tok}`}, timeout:30000});
+      alert('Email sent!'); setOpen(false);
+    } catch (e: any) { alert('Failed: ' + (e.response?.data?.error || e.message)); }
+    finally { setSending(false); }
   };
 
-  // ── Render helpers ─────────────────────────────────────────────────────────
   const renderSetup = () => {
-    if (setupStep === 'url') return (
+    if (step === 'url') return (
       <Card>
-        <Label>Backend URL</Label>
-        <Input
-          placeholder="https://your-applyx.vercel.app"
-          value={backendUrl}
-          onChange={(e) => setBackendUrl(e.target.value)}
-        />
-        <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 6 }}>
-          Deploy the ApplyX web app first, then paste your URL here.
-        </p>
-        <PrimaryButton style={{ marginTop: 20 }} onClick={async () => {
-          const cleaned = backendUrl.replace(/\/$/, '');
-          await storage.set('backendUrl', cleaned);
-          setBackendUrl(cleaned);
-          setSetupStep('auth');
-        }}>
-          Save URL
-        </PrimaryButton>
+        <Lbl c="Vercel URL" />
+        <Inp placeholder="https://your-app.vercel.app" value={urlIn} onChange={(e:any)=>setUrlIn(e.target.value)} />
+        <p className="hint">Your deployed ApplyX web app URL.</p>
+        <div className="gap14"/><BtnBlue onClick={saveUrl}>Save & Continue</BtnBlue>
       </Card>
     );
 
-    if (setupStep === 'auth') return (
+    if (step === 'auth') return (
       <Card>
-        <div style={{ textAlign: 'center', padding: '10px 0 20px' }}>
-          <LogIn size={40} color="#2563eb" style={{ margin: '0 auto 12px' }} />
-          <p style={{ fontWeight: 700, fontSize: '1rem', marginBottom: 8 }}>Sign in to ApplyX</p>
-          <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: 20 }}>
-            Log in with Google on your deployed dashboard, then come back.
+        <div className="center" style={{padding:'10px 0 8px'}}>
+          <div className="icon-ring"><LogIn size={22} color="#2563eb"/></div>
+          <p style={{fontWeight:800, fontSize:'1rem', marginBottom:8}}>Login Required</p>
+          <p className="hint" style={{marginBottom:18}}>
+            Click below — sign in with Google on the opened tab, then come back here.
           </p>
-          <PrimaryButton onClick={handleOpenLogin}>Open ApplyX Dashboard</PrimaryButton>
-          <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: 12 }}>
-            After logging in, this panel updates automatically.
-          </p>
+          {polling ? (
+            <>
+              <Loader2 size={28} color="#2563eb" className="spin" style={{display:'block',margin:'0 auto 10px'}}/>
+              <p style={{fontSize:'.8rem',color:'#2563eb',fontWeight:700}}>{pollMsg}</p>
+              <p className="hint">Complete sign in on the dashboard tab</p>
+              <button onClick={()=>{pollRef.current=false;setPolling(false);}} style={{marginTop:12,fontSize:'.72rem',color:'#94a3b8',background:'none',border:'none',cursor:'pointer',textDecoration:'underline'}}>Cancel</button>
+            </>
+          ) : (
+            <>
+              <BtnBlue onClick={openLogin}><LogIn size={15}/>Open Dashboard & Login</BtnBlue>
+              <p className="hint" style={{marginTop:10}}>Panel updates automatically after login</p>
+            </>
+          )}
         </div>
       </Card>
     );
 
-    if (setupStep === 'resume') return (
+    if (step === 'resume') return (
       <Card>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <Upload size={20} color="#2563eb" />
-          <span style={{ fontWeight: 700 }}>Upload your Resume</span>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+          <div style={{width:34,height:34,background:'#eff6ff',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center'}}><Upload size={16} color="#2563eb"/></div>
+          <p style={{fontWeight:800}}>Upload Resume</p>
         </div>
-        <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: 16 }}>
-          Your PDF resume powers the AI — upload it once and it's stored securely.
-        </p>
-        <input
-          type="file"
-          accept="application/pdf"
-          onChange={(e) => setResumeFile(e.target.files?.[0] || null)}
-          style={{ marginBottom: 12, fontSize: '0.8rem' }}
-        />
-        {resumeFile && (
-          <PrimaryButton onClick={handleResumeUpload} disabled={resumeUploading}>
-            {resumeUploading ? 'Uploading...' : `Upload ${resumeFile.name}`}
-          </PrimaryButton>
-        )}
+        <p className="hint" style={{marginBottom:14}}>Your PDF resume powers the AI generation.</p>
+        <input type="file" accept="application/pdf" onChange={(e:any)=>setResume(e.target.files?.[0]||null)} style={{width:'100%',fontSize:'.85rem',marginBottom:12}}/>
+        {resume && <BtnBlue onClick={uploadResume} disabled={uploading}>{uploading?<><Loader2 size={14} className="spin"/>Uploading...</>:`Upload "${resume.name}"`}</BtnBlue>}
       </Card>
     );
 
-    if (setupStep === 'gmail') return (
+    if (step === 'gmail') return (
       <Card>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <Mail size={20} color="#2563eb" />
-          <span style={{ fontWeight: 700 }}>Connect Gmail</span>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
+          <div style={{width:34,height:34,background:'#eff6ff',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center'}}><Mail size={16} color="#2563eb"/></div>
+          <p style={{fontWeight:800}}>Connect Gmail</p>
         </div>
-        <Label>Gmail Address</Label>
-        <Input
-          type="email"
-          placeholder="you@gmail.com"
-          value={gmailEmail}
-          onChange={(e) => setGmailEmail(e.target.value)}
-        />
-        <div style={{ height: 12 }} />
-        <Label>App Password</Label>
-        <div style={{ position: 'relative' }}>
-          <Input
-            type={showAppPass ? 'text' : 'password'}
-            placeholder="xxxx xxxx xxxx xxxx"
-            value={gmailAppPassword}
-            onChange={(e) => setGmailAppPassword(e.target.value)}
-            style={{ paddingRight: 36 }}
-          />
-          <button
-            onClick={() => setShowAppPass(!showAppPass)}
-            style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
-          >
-            {showAppPass ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
+        <Lbl c="Gmail Address"/>
+        <Inp type="email" placeholder="you@gmail.com" value={gEmail} onChange={(e:any)=>setGEmail(e.target.value)}/>
+        <div className="gap8"/>
+        <Lbl c="App Password"/>
+        <div className="rel">
+          <Inp type={showPass?'text':'password'} placeholder="xxxx xxxx xxxx xxxx" value={gPass} onChange={(e:any)=>setGPass(e.target.value)} style={{paddingRight:40}}/>
+          <button className="eye" onClick={()=>setShowPass(!showPass)}>{showPass?<EyeOff size={15}/>:<Eye size={15}/>}</button>
         </div>
-        <div style={{ marginTop: 10, padding: '8px 12px', background: '#eff6ff', borderRadius: 8, fontSize: '0.72rem', color: '#1d4ed8' }}>
-          <strong>How to get an App Password:</strong><br />
-          1. Enable 2-Step Verification on Google<br />
-          2. Go to myaccount.google.com/apppasswords<br />
-          3. Create one for "Mail" and paste it above
-        </div>
-        {gmailError && <p style={{ color: '#b91c1c', fontSize: '0.8rem', marginTop: 8 }}>{gmailError}</p>}
-        <PrimaryButton style={{ marginTop: 16 }} onClick={handleSaveGmail} disabled={gmailSaving}>
-          {gmailSaving ? 'Verifying...' : 'Save & Connect Gmail'}
-        </PrimaryButton>
+        <div className="info"><strong>Get App Password:</strong><br/>myaccount.google.com/apppasswords</div>
+        {gErr && <p className="err">{gErr}</p>}
+        <div className="gap14"/>
+        <BtnBlue onClick={saveGmail} disabled={gSaving}>{gSaving?<><Loader2 size={14} className="spin"/>Verifying...</>:'Connect Gmail'}</BtnBlue>
       </Card>
     );
-
     return null;
   };
 
-  const isSetupComplete = setupStep === 'done';
+  const done = step === 'done';
 
-  // ── Main render ────────────────────────────────────────────────────────────
   return (
     <>
-      <style>{styles}</style>
+      <style>{CSS}</style>
 
-      {!isOpen && (
-        <button onClick={() => setIsOpen(true)} className="floating-toggle">
-          <Mail size={28} />
+      {!open && (
+        <button className="toggle" onClick={()=>setOpen(true)} title="ApplyX">
+          <Mail size={24} color="white"/>
         </button>
       )}
 
-      {isOpen && (
-        <div className="sidebar-overlay" onClick={() => setIsOpen(false)}>
-          <div className="sidebar-container" onClick={(e) => e.stopPropagation()}>
-            <div className="sidebar-header">
-              <div className="header-content">
-                <h3>ApplyX</h3>
-                <p>1-Click AI Job Outreach</p>
+      {open && (
+        <div className="overlay" onClick={()=>setOpen(false)}>
+          <div className="panel" onClick={e=>e.stopPropagation()}>
+
+            <div className="hdr">
+              <div>
+                <div className="hdr-title">ApplyX</div>
+                <div className="hdr-sub">1-Click AI Job Outreach</div>
               </div>
-              <button className="close-button" onClick={() => setIsOpen(false)}><X size={24} /></button>
+              <button className="close" onClick={()=>setOpen(false)}><X size={18} color="white"/></button>
             </div>
 
-            <div className="sidebar-content">
-              {/* Setup screens */}
-              {!isSetupComplete ? renderSetup() :
-
-              /* Review screen */
-              showReview ? (
-                <Card style={{ background: '#f0f9ff', border: 'none' }}>
-                  <Label>Recipient Email</Label>
-                  <Input value={emailInput} onChange={(e) => setEmailInput(e.target.value)} placeholder="recipient@email.com" />
-                  <div style={{ height: 15 }} />
-                  <Label>Author Name</Label>
-                  <Input value={authorInput} onChange={(e) => setAuthorInput(e.target.value)} />
-                  <div style={{ height: 15 }} />
-                  <Label>Post Context</Label>
-                  <TextArea value={postInput} onChange={(e) => setPostInput(e.target.value)} />
-                  <PrimaryButton style={{ marginTop: 20 }} onClick={startAIGeneration}>
-                    Generate <Send size={20} />
-                  </PrimaryButton>
+            <div className="body">
+              {!done ? renderSetup() :
+              review ? (
+                <Card>
+                  <Lbl c="Recipient Email"/>
+                  <Inp placeholder="recipient@email.com" value={toEmail} onChange={(e:any)=>setToEmail(e.target.value)}/>
+                  <div className="gap8"/>
+                  <Lbl c="Author Name"/>
+                  <Inp value={author} onChange={(e:any)=>setAuthor(e.target.value)}/>
+                  <div className="gap8"/>
+                  <Lbl c="Post Context"/>
+                  <Inp ta value={postTxt} onChange={(e:any)=>setPostTxt(e.target.value)}/>
+                  <div className="gap14"/>
+                  <BtnBlue onClick={generate}><Send size={14}/>Generate Email</BtnBlue>
                 </Card>
               ) :
-
-              /* Loading */
               loading ? (
-                <div style={{ textAlign: 'center', padding: '50px 0' }}>
-                  <Loader2 size={56} color="#2563eb" className="animate-spin" />
-                  <h4 style={{ margin: '24px 0 8px', fontSize: '1.4rem' }}>Writing...</h4>
-                  <p style={{ color: '#64748b' }}>Crafting your personalized message.</p>
+                <div className="center" style={{padding:'60px 0'}}>
+                  <Loader2 size={44} color="#2563eb" className="spin" style={{display:'block',margin:'0 auto 18px'}}/>
+                  <p style={{fontWeight:700,fontSize:'1rem'}}>Writing your email...</p>
+                  <p className="hint" style={{marginTop:6}}>Crafting a personalized message</p>
                 </div>
               ) :
-
-              /* Error */
-              error ? (
-                <Card style={{ color: '#b91c1c', textAlign: 'center' }}>
-                  <p>{error}</p>
-                  <button className="dashboard-link" onClick={() => setShowReview(true)}>Retry</button>
+              genErr ? (
+                <Card>
+                  <p style={{color:'#b91c1c',textAlign:'center',fontWeight:600,marginBottom:14}}>{genErr}</p>
+                  <BtnGray onClick={()=>{setGenErr('');setReview(true);}}>Try Again</BtnGray>
                 </Card>
               ) :
-
-              /* Result */
-              emailText ? (
+              emailBody ? (
                 <>
-                  <Card>
-                    <Label>Sending To</Label>
-                    <Input value={emailInput} onChange={(e) => setEmailInput(e.target.value)} style={{ fontWeight: 600 }} />
-                  </Card>
-                  <Card>
-                    <Label>Subject</Label>
-                    <Input value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} style={{ fontWeight: 700 }} />
-                  </Card>
-                  <Card>
-                    <Label>Message</Label>
-                    <TextArea value={emailText} onChange={(e) => setEmailText(e.target.value)} />
-                  </Card>
-                  <div style={{ display: 'flex', gap: 15 }}>
-                    <PrimaryButton style={{ background: '#f1f5f9', color: '#475569', boxShadow: 'none' }} onClick={handleCopy}>
-                      {copied ? <Check size={20} color="#10b981" /> : <Copy size={20} />} Copy
-                    </PrimaryButton>
-                    <PrimaryButton onClick={handleSend} disabled={sending}>
-                      {sending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />} Send
-                    </PrimaryButton>
+                  <Card><Lbl c="To"/><Inp value={toEmail} onChange={(e:any)=>setToEmail(e.target.value)} placeholder="recipient@email.com"/></Card>
+                  <Card><Lbl c="Subject"/><Inp value={emailSubj} onChange={(e:any)=>setEmailSubj(e.target.value)} style={{fontWeight:700}}/></Card>
+                  <Card><Lbl c="Message"/><Inp ta value={emailBody} onChange={(e:any)=>setEmailBody(e.target.value)}/></Card>
+                  <div className="row">
+                    <BtnGray onClick={copy} style={{flex:1}}>
+                      {copied?<><Check size={14} color="#10b981"/>Copied!</>:<><Copy size={14}/>Copy</>}
+                    </BtnGray>
+                    <BtnBlue onClick={sendEmail} disabled={sending} style={{flex:2}}>
+                      {sending?<><Loader2 size={14} className="spin"/>Sending...</>:<><Send size={14}/>Send Email</>}
+                    </BtnBlue>
                   </div>
                 </>
-              ) :
-
-              /* Idle — show a prompt to start */
-              (
-                <Card style={{ textAlign: 'center', padding: '30px 20px' }}>
-                  <Mail size={40} color="#2563eb" style={{ margin: '0 auto 16px' }} />
-                  <p style={{ fontWeight: 700, marginBottom: 8 }}>Ready to go!</p>
-                  <p style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                    Click the <strong>ApplyX Outreach</strong> button on any LinkedIn post to generate a personalized email.
-                  </p>
+              ) : (
+                <Card style={{textAlign:'center',padding:'36px 20px'}}>
+                  <div className="icon-ring"><Mail size={22} color="#2563eb"/></div>
+                  <p style={{fontWeight:800,fontSize:'1rem',marginBottom:8}}>Ready to go!</p>
+                  <p className="hint">Click <strong>ApplyX Outreach</strong> on any LinkedIn post to start.</p>
                 </Card>
               )}
             </div>
 
-            <div className="sidebar-footer">
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                {isSetupComplete && (
-                  <div style={{ background: '#f8fafc', color: '#64748b', fontSize: '11px', fontWeight: 800, padding: '4px 10px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                    👤 {userName || 'You'} • ✉️ Gmail
-                  </div>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span className="footer-text">ApplyX v2.0</span>
-                <button onClick={() => setSetupStep('url')} className="dashboard-link" style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                  <Settings size={14} /> Config
-                </button>
-              </div>
+            <div className="ftr">
+              <span className="ftr-txt">ApplyX v2.0{done&&name?` • ${name}`:''}</span>
+              <button className="cfg" onClick={()=>{setStep('url');pollRef.current=false;setPolling(false);}}>
+                <Settings size={11}/>Config
+              </button>
             </div>
+
           </div>
         </div>
       )}
