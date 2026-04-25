@@ -343,6 +343,10 @@ Built with 💜 by [kiet7uke](https://github.com/kiet7uke) and contributors.
 
 <br/>
 
+[![Buy Me A Chai](https://buymeachai.ezee.li/assets/images/buymeachai-button.png)](https://buymeachai.ezee.li/kiet7uke)
+
+<br/>
+
 <img src="https://capsule-render.vercel.app/api?type=waving&color=0:8b5cf6,100:6366f1&height=100&section=footer" width="100%"/>
 
 </div>
